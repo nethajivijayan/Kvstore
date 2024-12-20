@@ -36,7 +36,7 @@ private:
         }
     }
 
-    // Load the store from the file
+    
     void loadFromFile() {
         lock_guard<mutex> lock(mtx);
         ifstream file(filePath);
@@ -53,14 +53,14 @@ private:
         }
     }
 
-    // Check if a key is expired
+   
     bool isExpired(const string& key) const {
         if (store.count(key) == 0) return false;
         time_t now = time(nullptr);
         return store.at(key).ttl != 0 && now > store.at(key).ttl;
     }
 
-    // Remove expired keys
+    
     void cleanupExpiredKeys() {
         lock_guard<mutex> lock(mtx);
         for (auto it = store.begin(); it != store.end();) {
@@ -156,20 +156,20 @@ public:
 int main() {
     KVDataStore kvStore;
 
-    // Create operation
+    
     cout << kvStore.create("key1", {"name", "Alice"}, 10) << endl;
 
-    // Read operation
+    
     cout << kvStore.read("key1") << endl;
 
-    // Wait for TTL to expire
+    
     this_thread::sleep_for(chrono::seconds(11));
     cout << kvStore.read("key1") << endl;
 
-    // Delete operation
+    
     cout << kvStore.remove("key1") << endl;
 
-    // Batch create
+    
     vector<pair<string, json>> batch = {
         {"key2", {"name", "Bob"}},
         {"key3", {"name", "Charlie"}}
