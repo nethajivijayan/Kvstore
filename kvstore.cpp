@@ -9,7 +9,6 @@
 using json = nlohmann::json;
 using namespace std;
 
-
 struct ValueEntry {
     json value;
     time_t ttl; 
@@ -24,7 +23,6 @@ private:
     const size_t MAX_VALUE_SIZE = 16 * 1024; // 16KB
     const size_t MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; 
 
-    
     void saveToFile() {
         lock_guard<mutex> lock(mtx);
         ofstream file(filePath, ios::trunc);
@@ -36,7 +34,6 @@ private:
         }
     }
 
-    
     void loadFromFile() {
         lock_guard<mutex> lock(mtx);
         ifstream file(filePath);
@@ -53,14 +50,12 @@ private:
         }
     }
 
-   
     bool isExpired(const string& key) const {
         if (store.count(key) == 0) return false;
         time_t now = time(nullptr);
         return store.at(key).ttl != 0 && now > store.at(key).ttl;
     }
 
-    
     void cleanupExpiredKeys() {
         lock_guard<mutex> lock(mtx);
         for (auto it = store.begin(); it != store.end();) {
@@ -72,11 +67,20 @@ private:
         }
     }
 
+    void periodicCleanup() {
+        while (true) {
+            this_thread::sleep_for(chrono::minutes(10));
+            cleanupExpiredKeys();
+        }
+    }
+
 public:
     KVDataStore(const string& path = "datastore.json") : filePath(path) {
         if (ifstream(path)) {
             loadFromFile();
         }
+
+        thread([this]() { periodicCleanup(); }).detach();
     }
 
     ~KVDataStore() {
@@ -85,7 +89,6 @@ public:
 
     string create(const string& key, const json& value, time_t ttl = 0) {
         lock_guard<mutex> lock(mtx);
-        cleanupExpiredKeys();
 
         if (key.length() > MAX_KEY_LENGTH) return "Error: Key length exceeds 32 characters.";
         if (value.dump().length() > MAX_VALUE_SIZE) return "Error: Value size exceeds 16KB.";
@@ -101,7 +104,6 @@ public:
 
     string read(const string& key) {
         lock_guard<mutex> lock(mtx);
-        cleanupExpiredKeys();
 
         if (!store.count(key)) return "Error: Key not found.";
         if (isExpired(key)) {
@@ -115,7 +117,6 @@ public:
 
     string remove(const string& key) {
         lock_guard<mutex> lock(mtx);
-        cleanupExpiredKeys();
 
         if (!store.count(key)) return "Error: Key not found.";
         store.erase(key);
@@ -125,7 +126,6 @@ public:
 
     string batchCreate(const vector<pair<string, json>>& entries, time_t ttl = 0) {
         lock_guard<mutex> lock(mtx);
-        cleanupExpiredKeys();
 
         const size_t BATCH_LIMIT = 100; // Limit batch size to avoid excessive memory use
         if (entries.size() > BATCH_LIMIT) {
@@ -156,17 +156,15 @@ public:
 int main() {
     KVDataStore kvStore;
 
-    
+   s
     cout << kvStore.create("key1", {"name", "Alice"}, 10) << endl;
-
-    
     cout << kvStore.read("key1") << endl;
 
-    
+   
     this_thread::sleep_for(chrono::seconds(11));
     cout << kvStore.read("key1") << endl;
 
-    
+   
     cout << kvStore.remove("key1") << endl;
 
     
