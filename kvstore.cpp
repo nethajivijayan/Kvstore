@@ -4,14 +4,14 @@
 #include <mutex>
 #include <thread>
 #include <chrono>
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 
 using json = nlohmann::json;
 using namespace std;
 
 struct ValueEntry {
     json value;
-    time_t ttl; 
+    time_t ttl;
 };
 
 class KVDataStore {
@@ -21,18 +21,24 @@ private:
     mutable mutex mtx;
     const size_t MAX_KEY_LENGTH = 32;
     const size_t MAX_VALUE_SIZE = 16 * 1024; // 16KB
-    const size_t MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; 
+    const size_t MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024;
 
-    void saveToFile() {
-        lock_guard<mutex> lock(mtx);
-        ofstream file(filePath, ios::trunc);
-        if (file.is_open()) {
-            file << json(store).dump();
-            file.close();
-        } else {
-            throw runtime_error("Failed to open file for writing.");
+   void saveToFile() {
+    lock_guard<mutex> lock(mtx);
+    ofstream file(filePath, ios::trunc);
+    if (file.is_open()) {
+
+        json j;
+        for (const auto& [key, entry] : store) {
+            j[key] = {{"value", entry.value}, {"ttl", entry.ttl}};
         }
+        file << j.dump();
+        file.close();
+
+    } else {
+        throw runtime_error("Failed to open file for writing.");
     }
+}
 
     void loadFromFile() {
         lock_guard<mutex> lock(mtx);
@@ -156,21 +162,21 @@ public:
 int main() {
     KVDataStore kvStore;
 
-   s
-    cout << kvStore.create("key1", {"name", "Alice"}, 10) << endl;
+    // Create key-value pairs
+    cout << kvStore.create("key1", {{"name", "Alice"}}, 10) << endl;
     cout << kvStore.read("key1") << endl;
 
-   
+    // Sleep to allow TTL expiration
     this_thread::sleep_for(chrono::seconds(11));
     cout << kvStore.read("key1") << endl;
 
-   
+    // Remove key-value pair
     cout << kvStore.remove("key1") << endl;
 
-    
+    // Batch create keys
     vector<pair<string, json>> batch = {
-        {"key2", {"name", "Bob"}},
-        {"key3", {"name", "Charlie"}}
+        {"key2", {{"name", "Bob"}}},
+        {"key3", {{"name", "Charlie"}}}
     };
     cout << kvStore.batchCreate(batch) << endl;
 
