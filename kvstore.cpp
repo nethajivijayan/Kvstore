@@ -20,7 +20,7 @@ private:
     string filePath;
     mutable mutex mtx;
     const size_t MAX_KEY_LENGTH = 32;
-    const size_t MAX_VALUE_SIZE = 16 * 1024; // 16KB
+    const size_t MAX_VALUE_SIZE = 16 * 1024;
     const size_t MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024;
 
    void saveToFile() {
@@ -94,7 +94,7 @@ public:
     }
 
     string create(const string& key, const json& value, time_t ttl = 0) {
-        lock_guard<mutex> lock(mtx);
+
 
         if (key.length() > MAX_KEY_LENGTH) return "Error: Key length exceeds 32 characters.";
         if (value.dump().length() > MAX_VALUE_SIZE) return "Error: Value size exceeds 16KB.";
@@ -133,7 +133,7 @@ public:
     string batchCreate(const vector<pair<string, json>>& entries, time_t ttl = 0) {
         lock_guard<mutex> lock(mtx);
 
-        const size_t BATCH_LIMIT = 100; // Limit batch size to avoid excessive memory use
+        const size_t BATCH_LIMIT = 100;
         if (entries.size() > BATCH_LIMIT) {
             return "Error: Batch size exceeds limit of 100 entries.";
         }
@@ -160,20 +160,32 @@ public:
 };
 
 int main() {
+    cout << "Program started..." << endl;
     KVDataStore kvStore;
 
-    // Create key-value pairs
+
+    cout << "Creating key1..." << endl;
     cout << kvStore.create("key1", {{"name", "Alice"}}, 10) << endl;
+
+
+    cout << "Reading key1..." << endl;
     cout << kvStore.read("key1") << endl;
 
-    // Sleep to allow TTL expiration
+
+    cout << "Sleeping for 11 seconds to allow TTL expiration..." << endl;
     this_thread::sleep_for(chrono::seconds(11));
+
+
+    cout << "Reading expired key1..." << endl;
     cout << kvStore.read("key1") << endl;
 
-    // Remove key-value pair
+
+    cout << "Removing key1..." << endl;
     cout << kvStore.remove("key1") << endl;
 
-    // Batch create keys
+
+
+    cout << "Batch creating keys..." << endl;
     vector<pair<string, json>> batch = {
         {"key2", {{"name", "Bob"}}},
         {"key3", {{"name", "Charlie"}}}
