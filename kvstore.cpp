@@ -172,8 +172,8 @@ int main() {
     cout << kvStore.read("key1") << endl;
 
 
-    cout << "Sleeping for 11 seconds to allow TTL expiration..." << endl;
-    this_thread::sleep_for(chrono::seconds(11));
+    cout << "Sleeping for 9 seconds to allow TTL expiration..." << endl;
+    this_thread::sleep_for(chrono::seconds(9));
 
 
     cout << "Reading expired key1..." << endl;
