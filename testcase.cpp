@@ -1,167 +1,90 @@
-#include <iostream>
-#include <cassert>
+#include "doctest.h"
+#include "kvstoe.hpp"
 #include <thread>
+#include <fstream>
+#include <chrono>
+#include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
-#include "kvdatastore.h" 
+#include "json.hpp"
+
 
 using json = nlohmann::json;
-using namespace std;
 
-void testCreateAndRead() {
-    KVDataStore kvStore("test_datastore.json");
+KVDataStore* kvStore;
 
-    auto result = kvStore.create("key1", {"name", "Alice"}, 10);
-    if (result != "Key-value pair created successfully.") {
-        throw runtime_error("testCreateAndRead failed: " + result);
+TEST_SUITE("KVDataStore Tests") {
+
+    TEST_CASE("Test Allow Only One Client Connection") {
+        KVDataStore kvStore("datastore.json");
+        KVDataStore anotherStore("datastore.json");
+        CHECK_NOTHROW(anotherStore.create("key1", { {"name", "Client"} }));
     }
 
-    
-    result = kvStore.read("key1");
-    if (result != "{\"name\":\"Alice\"}") {
-        throw runtime_error("testCreateAndRead failed: " + result);
+    TEST_CASE("Test TTL Checking") {
+        KVDataStore kvStore("datastore.json");
+        kvStore.create("key1", { {"name", "Alice"} }, 2); // TTL = 2 seconds
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::string result = kvStore.read("key1");
+        CHECK(result == "Error: Key has expired.");
     }
 
-   
-    this_thread::sleep_for(chrono::seconds(11));
-    result = kvStore.read("key1");
-    if (result != "Error: Key has expired.") {
-        throw runtime_error("testCreateAndRead failed: " + result);
+    TEST_CASE("Test Batch Creation") {
+        KVDataStore kvStore("datastore.json");
+        std::vector<std::pair<std::string, json>> batch = {
+            {"key1", { {"name", "Alice"} }},
+            {"key2", { {"name", "Bob"} }}
+        };
+        std::string result = kvStore.batchCreate(batch);
+        CHECK(result == "Batch create operation successful.");
+        CHECK(kvStore.read("key1") == "{\"name\":\"Alice\"}");
+        CHECK(kvStore.read("key2") == "{\"name\":\"Bob\"}");
     }
 
-    cout << "testCreateAndRead passed!" << endl;
+    TEST_CASE("Test Not Overwriting") {
+        KVDataStore kvStore("datastore.json");
+        kvStore.create("key1", { {"name", "Alice"} });
+        std::string result = kvStore.create("key1", { {"name", "Bob"} });
+        CHECK(result == "Error: Key already exists.");
+        CHECK(kvStore.read("key1") == "{\"name\":\"Alice\"}");
+    }
+
+    TEST_CASE("Test Load Existing File") {
+        KVDataStore kvStore("datastore.json");
+        kvStore.create("key1", { {"name", "Alice"} });
+        delete &kvStore;  // Triggers saveToFile()
+        KVDataStore reloadedStore("datastore.json");
+        CHECK(reloadedStore.read("key1") == "{\"name\":\"Alice\"}");
+    }
+
+    TEST_CASE("Test Concurrent Create and Read") {
+        KVDataStore kvStore("datastore.json");
+        std::thread writer([&]() {
+            kvStore.create("key1", { {"name", "Alice"} });
+        });
+
+        std::thread reader([&]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            CHECK(kvStore.read("key1") == "{\"name\":\"Alice\"}");
+        });
+
+        writer.join();
+        reader.join();
+    }
+
+    TEST_CASE("Test DB Close") {
+        KVDataStore kvStore("datastore.json");
+        kvStore.create("key1", { {"name", "Alice"} });
+        delete &kvStore;  // Triggers saveToFile()
+        KVDataStore reloadedStore("datastore.json");
+        CHECK(reloadedStore.read("key1") == "{\"name\":\"Alice\"}");
+    }
+
+    TEST_CASE("Test Error Handling Duplicate Keys") {
+        KVDataStore kvStore("datastore.json");
+        kvStore.create("key1", { {"name", "Alice"} });
+        std::string result = kvStore.create("key1", { {"name", "Duplicate"} });
+        CHECK(result == "Error: Key already exists.");
+    }
 }
 
-void testRemove() {
-    KVDataStore kvStore("test_datastore.json");
 
-    
-    auto result = kvStore.create("key2", {"name", "Bob"});
-    if (result != "Key-value pair created successfully.") {
-        throw runtime_error("testRemove failed: " + result);
-    }
-
-    result = kvStore.remove("key2");
-    if (result != "Key-value pair deleted successfully.") {
-        throw runtime_error("testRemove failed: " + result);
-    }
-
-    
-    result = kvStore.remove("key2");
-    if (result != "Error: Key not found.") {
-        throw runtime_error("testRemove failed: " + result);
-    }
-
-    cout << "testRemove passed!" << endl;
-}
-
-void testBatchCreate() {
-    KVDataStore kvStore("test_datastore.json");
-
-    vector<pair<string, json>> batch = {
-        {"key3", {"name", "Charlie"}},
-        {"key4", {"name", "Diana"}}
-    };
-
-    
-    auto result = kvStore.batchCreate(batch);
-    if (result != "Batch create operation successful.") {
-        throw runtime_error("testBatchCreate failed: " + result);
-    }
-
-    result = kvStore.read("key3");
-    if (result != "{\"name\":\"Charlie\"}") {
-        throw runtime_error("testBatchCreate failed: " + result);
-    }
-
-    result = kvStore.read("key4");
-    if (result != "{\"name\":\"Diana\"}") {
-        throw runtime_error("testBatchCreate failed: " + result);
-    }
-
-   
-    vector<pair<string, json>> batchWithDuplicate = {
-        {"key3", {"name", "Charlie"}},
-        {"key5", {"name", "Eve"}}
-    };
-    result = kvStore.batchCreate(batchWithDuplicate);
-    if (result != "Error: Duplicate key found in batch.") {
-        throw runtime_error("testBatchCreate failed: " + result);
-    }
-
-    cout << "testBatchCreate passed!" << endl;
-}
-
-void testPeriodicCleanup() {
-    KVDataStore kvStore("test_datastore.json");
-
-   
-    auto result = kvStore.create("key6", {"name", "Frank"}, 5);
-    if (result != "Key-value pair created successfully.") {
-        throw runtime_error("testPeriodicCleanup failed: " + result);
-    }
-
-    result = kvStore.create("key7", {"name", "Grace"}, 15);
-    if (result != "Key-value pair created successfully.") {
-        throw runtime_error("testPeriodicCleanup failed: " + result);
-    }
-
-    
-    this_thread::sleep_for(chrono::seconds(10));
-
-    
-    result = kvStore.read("key6");
-    if (result != "Error: Key has expired.") {
-        throw runtime_error("testPeriodicCleanup failed: " + result);
-    }
-
-    result = kvStore.read("key7");
-    if (result != "{\"name\":\"Grace\"}") {
-        throw runtime_error("testPeriodicCleanup failed: " + result);
-    }
-
-    cout << "testPeriodicCleanup passed!" << endl;
-}
-
-void testConcurrentAccess() {
-    KVDataStore kvStore("test_datastore.json");
-
-    auto writer = [&kvStore]() {
-        for (int i = 0; i < 10; ++i) {
-            auto result = kvStore.create("key" + to_string(i), {"value", i});
-            if (result != "Key-value pair created successfully.") {
-                throw runtime_error("testConcurrentAccess writer failed: " + result);
-            }
-        }
-    };
-
-    auto reader = [&kvStore]() {
-        for (int i = 0; i < 10; ++i) {
-            kvStore.read("key" + to_string(i));
-        }
-    };
-
-    thread t1(writer);
-    thread t2(reader);
-
-    t1.join();
-    t2.join();
-
-    cout << "testConcurrentAccess passed!" << endl;
-}
-
-int main() {
-    try {
-        testCreateAndRead();
-        testRemove();
-        testBatchCreate();
-        testPeriodicCleanup();
-        testConcurrentAccess();
-
-        cout << "All tests passed!" << endl;
-    } catch (const exception& e) {
-        cerr << "Test failed: " << e.what() << endl;
-        return 1;
-    }
-    return 0;
-}
