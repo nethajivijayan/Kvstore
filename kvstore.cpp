@@ -122,7 +122,7 @@ public:
     }
 
     string remove(const string& key) {
-        lock_guard<mutex> lock(mtx);
+        
 
         if (!store.count(key)) return "Error: Key not found.";
         store.erase(key);
